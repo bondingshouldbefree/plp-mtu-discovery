@@ -4,11 +4,12 @@
 #include <string.h> // strcmp(), strcpy(), memset()
 #include <unistd.h> // getopt()
 #include <arpa/inet.h> // inet_pton()
+#include <net/if.h> // IF_NAMESIZE
 #include <netinet/in.h> // struct sockaddr_in
 
 #include "mtu.h"
 
-int validateArgs(int argc, char** argv, struct sockaddr_in* lc_addr, struct sockaddr_in* sv_addr, int* proto, int* ms_timeout, int* max_retries)
+int validateArgs(int argc, char** argv, struct sockaddr_in* lc_addr, struct sockaddr_in* sv_addr, int* proto, int* ms_timeout, int* max_retries, char* iface)
 {
 	// this function returns 1 if the command line arguments are valid, 0 otherwise
 
@@ -38,8 +39,10 @@ int validateArgs(int argc, char** argv, struct sockaddr_in* lc_addr, struct sock
 	resolve_hints.ai_addr = NULL;
 	resolve_hints.ai_next = NULL;
 
+	iface[0] = '\0';
+
 	opterr = 0; // do not print any error message (default behavior of getopt())
-	while((opt = getopt(argc, argv, "p:s:l:t:r:")) != -1)
+	while((opt = getopt(argc, argv, "p:s:l:t:r:i:")) != -1)
 	{
 		switch(opt)
 		{
@@ -103,6 +106,14 @@ int validateArgs(int argc, char** argv, struct sockaddr_in* lc_addr, struct sock
 					fprintf(stderr, "Invalid maxreq value: '%s'\n", optarg);
 					return 0;
 				}
+				break;
+			case 'i': // network interface
+				if (strlen(optarg) >= IF_NAMESIZE)
+				{
+					fprintf(stderr, "Interface name too long: %s\n", optarg);
+					return 0;
+				}
+				strcpy(iface, optarg);
 				break;
 			case '?': // missing or invalid argument
 				return 0;
@@ -187,6 +198,7 @@ int main(int argc, char** argv)
 {
 	int ms_timeout, retries, protocol, res;
 	char format_addr[16] = {0};
+	char iface[IF_NAMESIZE] = {0};
 	struct sockaddr_in src;
 	struct sockaddr_in dst;
 
@@ -195,13 +207,13 @@ int main(int argc, char** argv)
 
 	setbuf(stdout, NULL); // unbuffered output
 
-	if (!validateArgs(argc, argv, &src, &dst, &protocol, &ms_timeout, &retries))
+	if (!validateArgs(argc, argv, &src, &dst, &protocol, &ms_timeout, &retries, iface))
 	{
-		fprintf(stderr, "Usage:\nICMP mode: sudo %s -p icmp -s <destination> [-t <timeout> -r <max-requests>]\nUDP mode: %s -p udp -s <destination:port> [-l <address:port> -t <timeout> -r <max-requests>]\n", argv[0], argv[0]);
+		fprintf(stderr, "Usage:\nICMP mode: sudo %s -p icmp -s <destination> [-i <interface> -t <timeout> -r <max-requests>]\nUDP mode: %s -p udp -s <destination:port> [-i <interface> -l <address:port> -t <timeout> -r <max-requests>]\n", argv[0], argv[0]);
 		return 1;
 	}
 
-	res = mtu_discovery(&src, &dst, protocol, retries, ms_timeout);
+	res = mtu_discovery(&src, &dst, protocol, retries, ms_timeout, iface[0] ? iface : NULL);
 	if (res < 0)
 	{
 		if (res == MTU_ERR_TIMEOUT)

@@ -69,6 +69,6 @@ struct mtu_ip_packet
 
 typedef enum { MTU_PROTO_ICMP = IPPROTO_ICMP, MTU_PROTO_UDP = IPPROTO_UDP } mtu_protocol;
 
-int mtu_discovery(struct sockaddr_in* source, struct sockaddr_in* dest, int protocol, int max_tries, int timeout);
+int mtu_discovery(struct sockaddr_in* source, struct sockaddr_in* dest, int protocol, int max_tries, int timeout, const char* iface);
 
 #endif

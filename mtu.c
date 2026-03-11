@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h> // memset()
 #include <unistd.h> // getpid()
+#include <net/if.h> // IFNAMSIZ
 #include <sys/time.h> // struct timeval
 #include <sys/types.h> // getpid(), struct addrinfo
 
@@ -57,7 +58,7 @@ int _checkPacket(int protocol, struct mtu_ip_packet* p, struct sockaddr_in* dest
 	return 1; // success
 }
 
-int _createUDPsock(struct sockaddr_in* source, int timeout_limit)
+int _createUDPsock(struct sockaddr_in* source, int timeout_limit, const char* iface)
 {
 	// creates UDP raw socket, returns file descriptor if no errors are caught
 
@@ -71,28 +72,38 @@ int _createUDPsock(struct sockaddr_in* source, int timeout_limit)
 		return MTU_ERR_SOCK;
 	}
 
+	if (iface != NULL && setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, iface, strlen(iface) + 1) != 0)
+	{
+		perror("Error in setsockopt(SO_BINDTODEVICE)");
+		close(fd);
+		return MTU_ERR_SOCK;
+	}
+
 	if (source != NULL && bind(fd, (struct sockaddr*)source, sizeof(struct sockaddr_in)) < 0) // bind on given address
 	{
 		perror("Error in bind()");
+		close(fd);
 		return MTU_ERR_SOCK;
 	}
 
 	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) != 0) // set timeout to input operations
 	{
 		perror("Error in setsockopt(timeout/udp)");
+		close(fd);
 		return MTU_ERR_SOCK;
 	}
 
 	if (setsockopt(fd, IPPROTO_IP, IP_HDRINCL, val, sizeof(yes)) != 0)
 	{
 		perror("Error in setsockopt(IP_HDRINCL)");
+		close(fd);
 		return MTU_ERR_SOCK;
 	}
 
 	return fd;
 }
 
-int _createICMPsock(int timeout_limit)
+int _createICMPsock(int timeout_limit, const char* iface)
 {
 	// creates ICMP raw socket, returns file descriptor if no errors are caught
 
@@ -103,6 +114,13 @@ int _createICMPsock(int timeout_limit)
 	if ((fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
 	{
 		perror("Error in socket(icmp)");
+		return MTU_ERR_SOCK;
+	}
+
+	if (iface != NULL && setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, iface, strlen(iface) + 1) != 0)
+	{
+		perror("Error in setsockopt(SO_BINDTODEVICE)");
+		close(fd);
 		return MTU_ERR_SOCK;
 	}
 
@@ -176,7 +194,7 @@ void _setIPhdr(struct mtu_ip_packet* p, struct sockaddr_in* source, struct socka
 	#endif
 }
 
-int mtu_discovery(struct sockaddr_in* source, struct sockaddr_in* dest, int protocol, int max_tries, int timeout)
+int mtu_discovery(struct sockaddr_in* source, struct sockaddr_in* dest, int protocol, int max_tries, int timeout, const char* iface)
 {
 	int fd, i;
 	struct mtu_ip_packet s;
@@ -198,7 +216,7 @@ int mtu_discovery(struct sockaddr_in* source, struct sockaddr_in* dest, int prot
 	switch(protocol)
 	{
 		case MTU_PROTO_UDP:
-			if ((fd = _createUDPsock(source, timeout)) < 0)
+			if ((fd = _createUDPsock(source, timeout, iface)) < 0)
 				return fd;
 			// fill in UDP header
 			s.proto_hdr.udp_hdr.uh_sport = source->sin_port; // filled in by the kernel
@@ -206,7 +224,7 @@ int mtu_discovery(struct sockaddr_in* source, struct sockaddr_in* dest, int prot
 
 			break;
 		case MTU_PROTO_ICMP:
-			if ((fd = _createICMPsock(timeout)) < 0)
+			if ((fd = _createICMPsock(timeout, iface)) < 0)
 				return fd;
 			// fill in ICMP header
 			s.proto_hdr.icmp_hdr.type = ICMP_ECHO;
