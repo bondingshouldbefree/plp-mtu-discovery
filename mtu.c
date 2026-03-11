@@ -109,12 +109,14 @@ int _createICMPsock(int timeout_limit)
 	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (struct timeval *)&tv, sizeof(struct timeval)) != 0) // set timeout to input operations
 	{
 		perror("Error in setsockopt(SO_RCVTIMEO)");
+		close(fd);
 		return MTU_ERR_SOCK;
 	}
 
 	if (setsockopt(fd, IPPROTO_IP, IP_HDRINCL, val, sizeof(yes)) != 0)
 	{
 		perror("Error in setsockopt(IP_HDRINCL)");
+		close(fd);
 		return MTU_ERR_SOCK;
 	}
 
