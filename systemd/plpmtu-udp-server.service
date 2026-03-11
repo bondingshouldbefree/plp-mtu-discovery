@@ -1,0 +1,11 @@
+[Unit]
+Description=plpmtu-udp-server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/plpmtu-udp-server 16383
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
