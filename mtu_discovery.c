@@ -6,8 +6,32 @@
 #include <arpa/inet.h> // inet_pton()
 #include <net/if.h> // IF_NAMESIZE
 #include <netinet/in.h> // struct sockaddr_in
+#include <sys/socket.h> // socket(), bind(), getsockname()
 
 #include "mtu.h"
+
+static uint16_t get_ephemeral_port(void)
+{
+	int fd;
+	struct sockaddr_in addr;
+	socklen_t len = sizeof(addr);
+	uint16_t port = 0;
+
+	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0)
+		return 0;
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = INADDR_ANY;
+
+	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0 &&
+	    getsockname(fd, (struct sockaddr *)&addr, &len) == 0)
+		port = addr.sin_port;
+
+	close(fd);
+	return port;
+}
 
 int validateArgs(int argc, char** argv, struct sockaddr_in* lc_addr, struct sockaddr_in* sv_addr, int* proto, int* ms_timeout, int* max_retries, char* iface)
 {
@@ -27,7 +51,7 @@ int validateArgs(int argc, char** argv, struct sockaddr_in* lc_addr, struct sock
 
 	lc_addr->sin_family = AF_INET;
 	sv_addr->sin_family = AF_INET;
-	lc_addr->sin_port = htons(25101); // arbitrary UDP port
+	lc_addr->sin_port = get_ephemeral_port();
 	inet_pton(AF_INET, "0.0.0.0", &lc_addr->sin_addr); // default local address
 
 	memset(&resolve_hints, 0, sizeof(struct addrinfo));
